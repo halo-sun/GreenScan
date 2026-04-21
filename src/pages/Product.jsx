@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { fetchAlternatives, fetchProduct } from "../lib/productFetcher";
-import { db } from "../lib/firebase";
-import { calculateGreenScore, getScoreLabel } from "../lib/greenScore";
+import { calculateGreenScore, getScoreLabel, getMetricsBreakdown } from "../lib/greenScore";
 import GreenScoreCard from "../components/GreenScoreCard";
 import SkeletonCard from "../components/SkeletonCard";
 
@@ -172,29 +170,6 @@ function getIngredientScore(ingredients = []) {
   return Math.max(0, Math.min(100, score));
 }
 
-function getBreakdownMetrics(product) {
-  const ingredients = product.ingredients || [];
-
-  return [
-    {
-      label: "Category Baseline",
-      value: CATEGORY_SCORES[(product.category || "").toLowerCase()] ?? 50,
-    },
-    {
-      label: "Ingredients",
-      value: getIngredientScore(ingredients),
-    },
-    {
-      label: "Packaging",
-      value: PACKAGING_SCORES[(product.packaging || "").toLowerCase()] ?? 50,
-    },
-    {
-      label: "EcoScore",
-      value: ECO_SCORE_VALUES[(product.ecoscoreGrade || product.ecoScore || "").toLowerCase()] ?? 50,
-    },
-  ];
-}
-
 function getIngredientTone(ingredient) {
   const normalized = ingredient.toLowerCase();
 
@@ -269,7 +244,7 @@ export default function Product() {
 
   const breakdownMetrics = useMemo(() => {
     if (!product) return [];
-    return getBreakdownMetrics(product);
+    return getMetricsBreakdown(product);
   }, [product]);
 
   async function handleRecalculateScore() {
@@ -438,7 +413,45 @@ export default function Product() {
         </section>
 
         <section className="space-y-6">
-          <GreenScoreCard score={product.greenScore} label={product.scoreLabel} />
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <GreenScoreCard score={product.greenScore} label={product.scoreLabel} />
+            </div>
+            <div className="flex flex-col gap-2">
+              {product.ecoscoreGrade && (
+                <div className={`px-4 py-2 rounded-xl text-lg font-bold border backdrop-blur-sm ${
+                  product.ecoscoreGrade === "a" ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400" :
+                  product.ecoscoreGrade === "b" ? "bg-green-500/15 border-green-500/30 text-green-400" :
+                  product.ecoscoreGrade === "c" ? "bg-yellow-500/15 border-yellow-500/30 text-yellow-400" :
+                  product.ecoscoreGrade === "d" ? "bg-orange-500/15 border-orange-500/30 text-orange-400" :
+                  "bg-red-500/15 border-red-500/30 text-red-400"
+                }`}>
+                  Eco: {product.ecoscoreGrade.toUpperCase()}
+                </div>
+              )}
+              {product.nutriscoreGrade && (
+                <div className={`px-4 py-2 rounded-xl text-lg font-bold border backdrop-blur-sm ${
+                  product.nutriscoreGrade === "a" ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400" :
+                  product.nutriscoreGrade === "b" ? "bg-green-500/15 border-green-500/30 text-green-400" :
+                  product.nutriscoreGrade === "c" ? "bg-yellow-500/15 border-yellow-500/30 text-yellow-400" :
+                  product.nutriscoreGrade === "d" ? "bg-orange-500/15 border-orange-500/30 text-orange-400" :
+                  "bg-red-500/15 border-red-500/30 text-red-400"
+                }`}>
+                  Nutri: {product.nutriscoreGrade.toUpperCase()}
+                </div>
+              )}
+              {product.novaGroup && (
+                <div className={`px-4 py-2 rounded-xl text-lg font-bold border backdrop-blur-sm ${
+                  product.novaGroup === 1 ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400" :
+                  product.novaGroup === 2 ? "bg-green-500/15 border-green-500/30 text-green-400" :
+                  product.novaGroup === 3 ? "bg-yellow-500/15 border-yellow-500/30 text-yellow-400" :
+                  "bg-red-500/15 border-red-500/30 text-red-400"
+                }`}>
+                  Nova: {product.novaGroup}
+                </div>
+              )}
+            </div>
+          </div>
 
           <div className="rounded-3xl border border-[color:var(--border-soft)] bg-[color:var(--surface-card)]/85 p-6 space-y-5">
             <div>
@@ -549,6 +562,116 @@ export default function Product() {
             {product.packaging === "Tetra Pack" && "Moderate impact. Better than plastic in some cases, but recycling access varies."}
           </p>
         </div>
+
+        {product.displayNutrition && (
+          <div className="rounded-3xl border border-[color:var(--border-soft)] bg-[color:var(--surface-card)]/85 p-6 space-y-4">
+            <h2 className="text-xl font-bold text-[color:var(--text-primary)]">Nutrition Facts</h2>
+            <p className="text-sm text-[color:var(--text-muted)]">Per 100g</p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: "Energy", key: "calories", unit: "kcal", high: null },
+                { label: "Fat", key: "fat", unit: "g", high: 20 },
+                { label: "Saturated Fat", key: "saturatedFat", unit: "g", high: 5 },
+                { label: "Sugar", key: "sugar", unit: "g", high: 22.5 },
+                { label: "Salt", key: "salt", unit: "g", high: 1.5 },
+                { label: "Protein", key: "protein", unit: "g", high: null },
+                { label: "Fiber", key: "fiber", unit: "g", high: null },
+              ].map(({ label, key, unit, high }) => {
+                const value = product.displayNutrition[key];
+                if (value === null || value === undefined) return null;
+                let colorClass = "text-[color:var(--text-primary)]";
+                if (high !== null && value > high) colorClass = "text-red-400";
+                else if (high !== null && value > high * 0.5) colorClass = "text-amber-400";
+                else if (high !== null) colorClass = "text-emerald-400";
+                return (
+                  <div key={key} className="flex justify-between items-center p-3 rounded-xl bg-white/5">
+                    <span className="text-sm text-[color:var(--text-muted)]">{label}</span>
+                    <span className={`text-sm font-semibold ${colorClass}`}>{value}{unit}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {product.labelsTags && product.labelsTags.length > 0 && (
+          <div className="rounded-3xl border border-[color:var(--border-soft)] bg-[color:var(--surface-card)]/85 p-6 space-y-4">
+            <h2 className="text-xl font-bold text-[color:var(--text-primary)]">Certifications & Labels</h2>
+            <div className="flex flex-wrap gap-2">
+              {product.labelsTags.map((label) => {
+                const labelNames = {
+                  "en:organic": "Organic",
+                  "en:fairtrade": "Fair Trade",
+                  "en:vegan": "Vegan",
+                  "en:vegetarian": "Vegetarian",
+                  "en:no-additives": "No Additives",
+                  "en:no-preservatives": "No Preservatives",
+                  "en:gluten-free": "Gluten Free",
+                  "en:low-sugar": "Low Sugar",
+                  "en:low-fat": "Low Fat",
+                  "en:natural": "Natural",
+                  "en:sustainable": "Sustainable",
+                  "en:rspo-certified-sustainable-palm-oil": "Sustainable Palm Oil",
+                };
+                const displayName = labelNames[label.toLowerCase()] || label.replace(/^[a-z]{2}:/, "").replace(/-/g, " ");
+                return (
+                  <span key={label} className="inline-flex items-center rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-300">
+                    {displayName}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {product.additivesTags && product.additivesTags.length > 0 && (
+          <div className="rounded-3xl border border-[color:var(--border-soft)] bg-[color:var(--surface-card)]/85 p-6 space-y-4">
+            <h2 className="text-xl font-bold text-[color:var(--text-primary)]">Additives</h2>
+            <div className="flex flex-wrap gap-2">
+              {product.additivesTags.map((additive) => {
+                const additiveNames = {
+                  "e102": "Tartrazine",
+                  "e110": "Sunset Yellow",
+                  "e122": "Carmoisine",
+                  "e124": "Ponceau 4R",
+                  "e211": "Sodium Benzoate",
+                  "e621": "MSG",
+                  "e951": "Aspartame",
+                  "e407": "Carrageenan",
+                  "e412": "Guar Gum",
+                  "e415": "Xanthan Gum",
+                  "e471": "Mono- and Diglycerides",
+                  "e472": "Esters of Mono/Diglycerides",
+                  "e160a": "Carotenes",
+                  "e160c": "Paprika Extract",
+                  "e300": "Vitamin C",
+                  "e306": "Tocopherols",
+                  "e322": "Lecithins",
+                  "e330": "Citric Acid",
+                  "e331": "Sodium Citrate",
+                  "e332": "Potassium Citrate",
+                  "e400": "Alginic Acid",
+                  "e401": "Sodium Alginate",
+                  "e440": "Pectin",
+                  "e500": "Sodium Carbonates",
+                  "e501": "Potassium Carbonates",
+                  "e503": "Ammonium Carbonates",
+                };
+                const harmful = ["e102", "e110", "e122", "e124", "e211", "e621", "e951"];
+                const controversial = ["e407", "e412", "e415", "e471", "e472"];
+                const addCode = additive.toLowerCase();
+                let badgeClass = "border-emerald-400/20 bg-emerald-500/10 text-emerald-300";
+                if (harmful.includes(addCode)) badgeClass = "border-red-400/20 bg-red-500/10 text-red-300";
+                else if (controversial.includes(addCode)) badgeClass = "border-amber-400/20 bg-amber-500/10 text-amber-300";
+                return (
+                  <span key={additive} className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium ${badgeClass}`}>
+                    {additive.toUpperCase()}: {additiveNames[addCode] || "Additive"}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="pt-4">
@@ -569,6 +692,31 @@ export default function Product() {
             </div>
           )}
         </div>
+
+      <div className="rounded-3xl border border-[color:var(--border-soft)] bg-[color:var(--surface-card)]/85 p-6 space-y-4">
+        <h2 className="text-xl font-bold text-[color:var(--text-primary)]">Product Data</h2>
+        <div className="flex flex-wrap gap-4 items-center">
+          <span className="text-sm text-[color:var(--text-muted)]">
+            Source: <span className="text-[color:var(--text-primary)] font-medium">{product.source === "openfoodfacts" ? "OpenFoodFacts" : product.source === "curated" ? "Curated" : "Firestore Cache"}</span>
+          </span>
+          {product.cachedAt && (
+            <span className="text-sm text-[color:var(--text-muted)]">
+              Updated: <span className="text-[color:var(--text-primary)] font-medium">{new Date(product.cachedAt.seconds * 1000).toLocaleDateString()}</span>
+            </span>
+          )}
+        </div>
+        <a
+          href={`https://world.openfoodfacts.org/product/${product.barcode}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+        >
+          Improve this product on OpenFoodFacts
+          <svg className="w-4 h-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        </a>
+      </div>
     </MotionDiv>
   );
 }
