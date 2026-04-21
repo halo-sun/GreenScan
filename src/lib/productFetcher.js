@@ -102,43 +102,64 @@ function enrichProduct(product) {
 }
 
 /**
- * Map an OpenFoodFacts API response to our product schema.
+ * Extract display nutrition data from nutriments object (per 100g).
+ */
+function extractDisplayNutrition(nutriments = {}) {
+  return {
+    calories: typeof nutriments["energy-kcal_100g"] === "number" ? nutriments["energy-kcal_100g"] 
+      : typeof nutriments["energy-kcal"] === "number" ? nutriments["energy-kcal"] 
+      : null,
+    fat: typeof nutriments["fat_100g"] === "number" ? nutriments["fat_100g"] 
+      : typeof nutriments["fat"] === "number" ? nutriments["fat"] 
+      : null,
+    saturatedFat: typeof nutriments["saturated-fat_100g"] === "number" ? nutriments["saturated-fat_100g"]
+      : typeof nutriments["saturated_fat_100g"] === "number" ? nutriments["saturated_fat_100g"]
+      : null,
+    sugar: typeof nutriments["sugars_100g"] === "number" ? nutriments["sugars_100g"]
+      : typeof nutriments["sugar_100g"] === "number" ? nutriments["sugar_100g"]
+      : null,
+    salt: typeof nutriments["salt_100g"] === "number" ? nutriments["salt_100g"]
+      : typeof nutriments["sodium_100g"] === "number" ? nutriments["sodium_100g"] * 2.5
+      : null,
+    protein: typeof nutriments["proteins_100g"] === "number" ? nutriments["proteins_100g"]
+      : typeof nutriments["protein_100g"] === "number" ? nutriments["protein_100g"]
+      : null,
+    fiber: typeof nutriments["fiber_100g"] === "number" ? nutriments["fiber_100g"]
+      : typeof nutriments["fibre_100g"] === "number" ? nutriments["fibre_100g"]
+      : null,
+  };
+}
+
+/**
+ * Map an OpenFoodFacts API response to our product schema with ALL available fields.
  */
 function mapOFFProduct(data, barcode) {
-  const product = data.product || {};
+  const p = data.product || {};
 
-  // 1. Packaging
+  // Packaging
   const packagingRaw = [
-    product.packaging || "",
-    ...(product.packaging_tags || [])
+    p.packaging || "",
+    ...(p.packaging_tags || [])
   ].join(" ").toLowerCase();
 
-  let packaging = "Plastic"; // default
+  let packaging = "Plastic";
   if (packagingRaw.includes("glass")) packaging = "Glass";
   else if (packagingRaw.includes("paper") || packagingRaw.includes("cardboard")) packaging = "Paper";
   else if (packagingRaw.includes("metal") || packagingRaw.includes("tin") || packagingRaw.includes("aluminium")) packaging = "Metal";
   else if (packagingRaw.includes("tetra")) packaging = "Tetra Pack";
 
-  // 2. Ingredients
-  const ingredientsText = product.ingredients_text || product.ingredients_text_en || "";
-  const ingredients = ingredientsText
-    .toLowerCase()
-    .split(/[,;()]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  // 3. Categories
+  // Categories
   const categoriesRaw = [
-    product.categories || "",
-    ...(product.categories_tags || [])
+    p.categories || "",
+    ...(p.categories_tags || [])
   ].join(" ").toLowerCase();
   const categoriesText =
-    (product.categories || "").trim() ||
-    (product.categories_tags || [])
+    (p.categories || "").trim() ||
+    (p.categories_tags || [])
       .map((tag) => tag.replace(/^[a-z]{2}:/, "").replace(/-/g, " "))
       .join(", ");
 
-  let category = "Snacks"; // default
+  let category = "Snacks";
   if (categoriesRaw.includes("biscuit") || categoriesRaw.includes("cookie")) category = "Biscuits";
   else if (categoriesRaw.includes("soft drink") || categoriesRaw.includes("beverage") || categoriesRaw.includes("soda")) category = "Soft Drinks";
   else if (categoriesRaw.includes("dairy") || categoriesRaw.includes("milk") || categoriesRaw.includes("cheese") || categoriesRaw.includes("yogurt")) category = "Dairy";
@@ -147,37 +168,94 @@ function mapOFFProduct(data, barcode) {
   else if (categoriesRaw.includes("tea") || categoriesRaw.includes("coffee")) category = "Tea/Coffee";
   else if (categoriesRaw.includes("personal") || categoriesRaw.includes("soap") || categoriesRaw.includes("shampoo")) category = "Personal Care";
 
+  // Ingredients
+  const ingredientsText = p.ingredients_text || p.ingredients_text_en || "";
+  const ingredients = ingredientsText
+    .toLowerCase()
+    .split(/[,;()]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  // Normalized category (most specific)
+  const normalizedCategory = extractSpecificCategory(categoriesText, category);
+
+  // Category tags - flat array from categories_tags
+  const categoryTags = Array.isArray(p.categories_tags)
+    ? [...new Set(
+        p.categories_tags
+          .map((tag) => tag.replace(/^[a-z]{2}:/, "").replace(/[-_]/g, " ").toLowerCase())
+          .filter((word) => word.length >= 4)
+      )]
+    : extractCategoryTags(categoriesText, category);
+
+  // Display nutrition
+  const displayNutrition = extractDisplayNutrition(p.nutriments);
+
+  // Build complete product object with ALL available fields
   const mapped = {
+    // Core identifiers
     barcode,
-    name: product.product_name || product.product_name_en || "Unknown Product",
-    brand: product.brands || "Unknown Brand",
+    name: p.product_name || p.product_name_en || "Unknown Product",
+    brand: p.brands || "Unknown Brand",
     category,
     categoriesText,
+    normalizedCategory,
+    categoryTags,
+
+    // Packaging
     packaging,
+    packagingTags: p.packaging_tags || [],
+
+    // Ingredients
     ingredients,
     ingredientsText,
-    ecoscoreGrade: product.ecoscore_grade || "",
-    image: product.image_front_url || product.image_url || "",
+
+    // Scores
+    ecoscoreGrade: p.ecoscore_grade || "",
+    nutriscoreGrade: p.nutriscore_grade || "",
+    novaGroup: p.nova_group || null,
+
+    // Images
+    image: p.image_front_url || p.image_url || "",
+    imageIngredients: p.image_ingredients_url || "",
+    imageNutrition: p.image_nutrition_url || "",
+
+    // Labels
+    labels: p.labels || "",
+    labelsTags: p.labels_tags || [],
+
+    // Origin & manufacturing
+    manufacturingPlaces: p.manufacturing_places || "",
+    origins: p.origins || "",
+
+    // Quantity info
+    quantity: p.quantity || "",
+    servingSize: p.serving_size || "",
+
+    // Nutrition data
+    nutriments: p.nutriments || {},
+    displayNutrition,
+
+    // Additives & allergens
+    additivesTags: p.additives_tags || [],
+    allergens: p.allergens || "",
+    traces: p.traces || "",
+
+    // Stores & countries
+    stores: p.stores || "",
+    countries: p.countries || "",
+
+    // Source
     source: "openfoodfacts",
   };
 
-  // 4. Logging found/missing fields
-  const missing = [];
-  const found = [];
+  // Remove empty strings from labels/arrays for cleaner storage
+  if (mapped.labelsTags) mapped.labelsTags = mapped.labelsTags.filter(Boolean);
+  if (mapped.packagingTags) mapped.packagingTags = mapped.packagingTags.filter(Boolean);
+  if (mapped.additivesTags) mapped.additivesTags = mapped.additivesTags.filter(Boolean);
+  if (mapped.labels) mapped.labels = mapped.labels.split(",").map(s => s.trim()).filter(Boolean).join(", ");
 
-  Object.entries(mapped).forEach(([key, value]) => {
-    if (!value || (Array.isArray(value) && value.length === 0) || value === "Unknown Product" || value === "Unknown Brand") {
-      missing.push(key);
-    } else {
-      found.push(key);
-    }
-  });
-
-  console.log(`[Product Fetch] Barcode: ${barcode}`);
-  console.log(`- Found fields: ${found.join(", ")}`);
-  if (missing.length > 0) {
-    console.log(`- Missing fields: ${missing.join(", ")}`);
-  }
+  console.log(`[Product Fetch] Barcode: ${barcode}, name: ${mapped.name}`);
 
   return mapped;
 }
@@ -202,6 +280,32 @@ export async function fetchProduct(barcode) {
 
     if (docSnap.exists()) {
       const product = docSnap.data();
+      const cachedAt = product.cachedAt;
+
+      // Check if cache is older than 30 days
+      if (cachedAt) {
+        const cacheAge = Date.now() - cachedAt.toMillis();
+        const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+
+        if (cacheAge > thirtyDays) {
+          console.log(`[Product Fetch] Cache expired for ${cleanBarcode} (${Math.floor(cacheAge / (24 * 60 * 60 * 1000))} days old), refreshing...`);
+
+          // Re-fetch from OFF API in background (don't await, return cached first)
+          fetch(`${OFF_API_V0}/${cleanBarcode}.json`)
+            .then((res) => res.json())
+            .then(async (data) => {
+              if (data.status === 1 && data.product) {
+                const refreshed = mapOFFProduct(data, cleanBarcode);
+                const enriched = enrichProduct(refreshed);
+                await setDoc(docRef, { ...enriched, cachedAt: serverTimestamp() }, { merge: true });
+                window.dispatchEvent(new Event("compareProductChanged"));
+                console.log(`[Product Fetch] Cache refreshed for ${cleanBarcode}`);
+              }
+            })
+            .catch((err) => console.warn("Background refresh failed:", err.message));
+        }
+      }
+
       return enrichProduct(product);
     }
   } catch (err) {
