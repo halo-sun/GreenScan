@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import Navbar from "./components/Navbar";
 import BottomNav from "./components/BottomNav";
+import GlobalCompareBanner from "./components/GlobalCompareBanner";
 import Home from "./pages/Home";
 import Scan from "./pages/Scan";
 import Product from "./pages/Product";
@@ -36,6 +37,7 @@ function AppShell() {
     <div className="min-h-screen bg-[color:var(--bg-app)] text-[color:var(--text-primary)] font-sans transition-colors duration-300 pb-20 md:pb-0">
       <Navbar />
       <AnimatePresence mode="wait">
+        <GlobalCompareBanner />
         <Routes location={location} key={location.pathname}>
           <Route path="/" element={<Home />} />
           <Route path="/database" element={<Database />} />

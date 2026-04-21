@@ -127,7 +127,7 @@ export default function Product() {
   const [manualIngredients, setManualIngredients] = useState("");
   const [recalculating, setRecalculating] = useState(false);
   const [recalcError, setRecalcError] = useState("");
-  const [compareSaved, setCompareSaved] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
 
   useEffect(() => {
     async function loadProduct() {
@@ -145,12 +145,12 @@ export default function Product() {
           if (savedCompare) {
             try {
               const parsed = JSON.parse(savedCompare);
-              setCompareSaved(parsed.barcode === data.barcode);
+              setCompareMode(parsed.barcode === data.barcode);
             } catch {
-              setCompareSaved(false);
+              setCompareMode(false);
             }
           } else {
-            setCompareSaved(false);
+            setCompareMode(false);
           }
         } else {
           setProduct(null);
@@ -235,19 +235,35 @@ export default function Product() {
     }
   }
 
-  function handleSaveCompareProduct() {
+  function handleToggleCompare() {
     if (!product) return;
 
-    window.localStorage.setItem(
-      "compareProduct",
-      JSON.stringify({
-        barcode: product.barcode,
-        name: product.name,
-      }),
-    );
-
-    setCompareSaved(true);
+    if (compareMode) {
+      window.localStorage.removeItem("compareProduct");
+      setCompareMode(false);
+    } else {
+      window.localStorage.setItem(
+        "compareProduct",
+        JSON.stringify({
+          barcode: product.barcode,
+          name: product.name,
+        }),
+      );
+      setCompareMode(true);
+    }
   }
+
+  function clearCompareFromBanner() {
+    window.localStorage.removeItem("compareProduct");
+    setCompareMode(false);
+  }
+
+  useEffect(() => {
+    window.clearCompareFromProduct = clearCompareFromBanner;
+    return () => {
+      delete window.clearCompareFromProduct;
+    };
+  }, []);
 
   if (loading) {
     return <SkeletonCard />;
@@ -310,14 +326,18 @@ export default function Product() {
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={handleSaveCompareProduct}
-                className="inline-flex items-center rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-500"
+                onClick={handleToggleCompare}
+                className={`inline-flex items-center rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${
+                  compareMode
+                    ? "bg-red-600 text-white hover:bg-red-500"
+                    : "bg-emerald-600 text-white hover:bg-emerald-500"
+                }`}
               >
-                {compareSaved ? "Saved for Compare" : "Compare"}
+                {compareMode ? "Remove from Compare" : "Compare"}
               </button>
-              {compareSaved && (
+              {compareMode && (
                 <span className="inline-flex items-center rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-                  This product is ready for your next comparison scan.
+                  Added to compare
                 </span>
               )}
             </div>
