@@ -48,6 +48,14 @@ export default function Navbar() {
           >
             Database
           </Link>
+          {user && (
+            <Link
+              to="/admin"
+              className="px-4 py-2 text-sm text-[color:var(--text-muted)] hover:text-emerald-400 rounded-lg hover:bg-white/5 transition-all"
+            >
+              Admin
+            </Link>
+          )}
 
           {user && (
             <Link

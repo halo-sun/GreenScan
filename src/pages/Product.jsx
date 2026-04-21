@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { fetchAlternatives, fetchProduct } from "../lib/productFetcher";
 import { calculateGreenScore, getScoreLabel, getMetricsBreakdown } from "../lib/greenScore";
 import GreenScoreCard from "../components/GreenScoreCard";
 import SkeletonCard from "../components/SkeletonCard";
+import { db } from "../lib/firebase";
 
 function AlternativeCard({ product, currentProduct }) {
   const [expanded, setExpanded] = useState(false);
@@ -150,25 +152,6 @@ const ECO_SCORE_VALUES = {
   d: 35,
   e: 20,
 };
-
-function getIngredientScore(ingredients = []) {
-  let score = 50;
-  const normalized = ingredients.map((ingredient) => ingredient.toLowerCase());
-
-  NEGATIVE_KEYWORDS.forEach((keyword) => {
-    if (normalized.some((ingredient) => ingredient.includes(keyword))) {
-      score -= keyword.includes("artificial") ? 6 : 5;
-    }
-  });
-
-  POSITIVE_KEYWORDS.forEach((keyword) => {
-    if (normalized.some((ingredient) => ingredient.includes(keyword))) {
-      score += keyword === "organic" ? 10 : 8;
-    }
-  });
-
-  return Math.max(0, Math.min(100, score));
-}
 
 function getIngredientTone(ingredient) {
   const normalized = ingredient.toLowerCase();
@@ -351,9 +334,22 @@ export default function Product() {
           <p className="mb-8 text-[color:var(--text-muted)]">
             We couldn&apos;t find a product with barcode <span className="font-mono text-[color:var(--text-primary)]">{barcode}</span> in our database.
           </p>
-          <Link to="/scan" className="inline-flex px-6 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 transition-colors font-medium">
-            Scan Another Product
-          </Link>
+          <div className="space-y-4">
+            <a
+              href={`https://world.openfoodfacts.org/product/${barcode}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex rounded-xl bg-emerald-600 px-6 py-3 font-medium text-white transition-colors hover:bg-emerald-500"
+            >
+              Add this product on OpenFoodFacts
+            </a>
+            <p className="text-sm text-[color:var(--text-muted)]">
+              Once it&apos;s added there, it should appear in GreenScan within 24 hours.
+            </p>
+            <Link to="/scan" className="inline-flex px-6 py-3 bg-[color:var(--surface-muted)] text-[color:var(--text-primary)] rounded-xl hover:opacity-90 transition-opacity font-medium">
+              Scan Another Product
+            </Link>
+          </div>
         </div>
       </MotionDiv>
     );
@@ -717,6 +713,13 @@ export default function Product() {
           </svg>
         </a>
       </div>
+
+      <Link
+        to="/scan"
+        className="fixed bottom-24 right-4 z-40 inline-flex items-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/30 transition-colors hover:bg-emerald-500 md:bottom-8 md:right-8"
+      >
+        Scan Again
+      </Link>
     </MotionDiv>
   );
 }

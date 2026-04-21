@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { collection, query, orderBy, getDocs } from "firebase/firestore";
+import { collection, query, orderBy, getDocs, where, limit } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import ProductCard from "../components/ProductCard";
 
@@ -12,9 +12,19 @@ const PAGE_TRANSITION = {
   transition: { duration: 0.3 },
 };
 
+const BEST_IN_CATEGORY_CONFIG = [
+  { title: "Best Ketchup", field: "categoryTags", operator: "array-contains", value: "ketchup" },
+  { title: "Best Biscuit", field: "category", operator: "==", value: "Biscuits" },
+  { title: "Best Health Drink", field: "category", operator: "==", value: "Health Drinks" },
+  { title: "Best Soft Drink", field: "category", operator: "==", value: "Soft Drinks" },
+  { title: "Best Dairy Product", field: "category", operator: "==", value: "Dairy" },
+  { title: "Best Snack", field: "category", operator: "==", value: "Snacks" },
+];
+
 export default function Database() {
   const MotionDiv = motion.div;
   const [products, setProducts] = useState([]);
+  const [bestByCategory, setBestByCategory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -28,6 +38,30 @@ export default function Database() {
           ...doc.data(),
         }));
         setProducts(data);
+
+        const categoryQueries = BEST_IN_CATEGORY_CONFIG.map(async (config) => {
+          try {
+            const topQuery = query(
+              collection(db, "products"),
+              where(config.field, config.operator, config.value),
+              orderBy("greenScore", "desc"),
+              limit(1),
+            );
+            const topSnapshot = await getDocs(topQuery);
+            if (topSnapshot.empty) return { ...config, product: null };
+            const bestDoc = topSnapshot.docs[0];
+            return {
+              ...config,
+              product: { id: bestDoc.id, ...bestDoc.data() },
+            };
+          } catch (error) {
+            console.warn(`Best category query failed for ${config.title}:`, error);
+            return { ...config, product: null };
+          }
+        });
+
+        const bestResults = await Promise.all(categoryQueries);
+        setBestByCategory(bestResults);
       } catch (err) {
         console.error("Error fetching database:", err);
       } finally {
@@ -70,6 +104,32 @@ export default function Database() {
           </div>
         </div>
       </div>
+
+      {bestByCategory.length > 0 && (
+        <section className="mb-10 rounded-3xl border border-[color:var(--border-soft)] bg-[color:var(--surface-card)]/60 p-6">
+          <h2 className="text-2xl font-bold text-[color:var(--text-primary)]">Top Rated In Major Categories</h2>
+          <p className="mt-1 text-sm text-[color:var(--text-muted)]">
+            Highest Green Score products from each key category.
+          </p>
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {bestByCategory.map((item) => (
+              <div key={item.title} className="rounded-2xl border border-[color:var(--border-soft)] bg-[color:var(--surface-muted)]/30 p-4">
+                <p className="text-sm font-semibold text-emerald-300">{item.title}</p>
+                {item.product ? (
+                  <Link to={`/product/${item.product.barcode}`} className="mt-2 block">
+                    <p className="font-semibold text-[color:var(--text-primary)]">{item.product.name || "Unknown Product"}</p>
+                    <p className="text-sm text-[color:var(--text-muted)]">
+                      {item.product.brand || "Unknown Brand"} • Green Score {item.product.greenScore ?? "N/A"}
+                    </p>
+                  </Link>
+                ) : (
+                  <p className="mt-2 text-sm text-[color:var(--text-muted)]">No product available yet.</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-20">

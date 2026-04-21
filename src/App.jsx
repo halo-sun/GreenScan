@@ -11,6 +11,7 @@ import Product from "./pages/Product";
 import Database from "./pages/Database";
 import Profile from "./pages/Profile";
 import Compare from "./pages/Compare";
+import Admin from "./pages/Admin";
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -43,6 +44,14 @@ function AppShell() {
           <Route path="/database" element={<Database />} />
           <Route path="/product/:barcode" element={<Product />} />
           <Route path="/compare" element={<Compare />} />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <Admin />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/scan"
             element={
