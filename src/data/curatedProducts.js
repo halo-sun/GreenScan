@@ -331,6 +331,6 @@ export const curatedProductsMap = {
 };
 
 /**
- * Flat array of all curated products (used by getAlternatives).
+ * Flat array of all curated products.
  */
 export const curatedProducts = Object.values(curatedProductsMap);

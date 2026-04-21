@@ -2,11 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { fetchProduct } from "../lib/productFetcher";
+import { fetchAlternatives, fetchProduct } from "../lib/productFetcher";
 import { db } from "../lib/firebase";
-import { calculateGreenScore, getAlternatives, getScoreLabel } from "../lib/greenScore";
+import { calculateGreenScore, getScoreLabel } from "../lib/greenScore";
 import GreenScoreCard from "../components/GreenScoreCard";
-import ProductCard from "../components/ProductCard";
 import SkeletonCard from "../components/SkeletonCard";
 
 function AlternativeCard({ product, currentProduct }) {
@@ -231,8 +230,7 @@ export default function Product() {
         if (data) {
           setProduct(data);
           setManualIngredients(data.ingredientsText || "");
-          const alts = getAlternatives(data);
-          console.log("alternatives found:", alts);
+          const alts = await fetchAlternatives(data);
           setAlternatives(alts);
 
           const savedCompare = window.localStorage.getItem("compareProduct");
@@ -309,7 +307,8 @@ export default function Product() {
     };
 
     setProduct(updatedProduct);
-    setAlternatives(getAlternatives(updatedProduct));
+    const alternatives = await fetchAlternatives(updatedProduct);
+    setAlternatives(alternatives);
 
     try {
       await setDoc(
@@ -565,7 +564,7 @@ export default function Product() {
           ) : (
             <div className="rounded-2xl border border-[color:var(--border-soft)] bg-[color:var(--surface-card)]/85 p-6 text-center">
               <p className="text-[color:var(--text-muted)]">
-                No greener alternatives found in our database yet. We&apos;re constantly adding more products!
+                No alternatives found yet.
               </p>
             </div>
           )}

@@ -1,10 +1,80 @@
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  where,
+} from "firebase/firestore";
 import { db } from "./firebase";
 import { calculateGreenScore, getScoreLabel } from "./greenScore";
 import { curatedProductsMap } from "../data/curatedProducts";
 
 const OFF_API_V0 = "https://world.openfoodfacts.org/api/v0/product";
 const OFF_API_V2 = "https://world.openfoodfacts.org/api/v2/product";
+
+function normalizeCategoryText(value = "") {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9,\s/-]/g, " ")
+    .replace(/[-_/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractSpecificCategory(categoriesString = "", fallbackCategory = "") {
+  const categories = normalizeCategoryText(categoriesString)
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length >= 3);
+
+  if (categories.length === 0) {
+    return normalizeCategoryText(fallbackCategory);
+  }
+
+  const scored = categories.map((value, index) => ({
+    value,
+    index,
+    wordCount: value.split(" ").filter(Boolean).length,
+    charCount: value.length,
+  }));
+
+  scored.sort((a, b) => {
+    if (b.wordCount !== a.wordCount) return b.wordCount - a.wordCount;
+    if (b.charCount !== a.charCount) return b.charCount - a.charCount;
+    return b.index - a.index;
+  });
+
+  return scored[0]?.value || normalizeCategoryText(fallbackCategory);
+}
+
+function extractCategoryTags(categoriesString = "", fallbackCategory = "") {
+  const source = `${categoriesString || ""}, ${fallbackCategory || ""}`;
+
+  const tags = normalizeCategoryText(source)
+    .split(/[\s,]+/)
+    .map((word) => word.trim())
+    .filter((word) => word.length >= 3);
+
+  return [...new Set(tags)];
+}
+
+function getTopCategoryWords(normalizedCategory = "", categoryTags = []) {
+  const preferred = normalizeCategoryText(normalizedCategory)
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter((word) => word.length >= 3);
+
+  if (preferred.length > 0) {
+    return [...new Set(preferred)].slice(0, 10);
+  }
+
+  return [...new Set((categoryTags || []).filter((word) => (word || "").length >= 3))].slice(0, 10);
+}
 
 /**
  * Normalize a product object so it has a consistent shape
@@ -13,12 +83,21 @@ const OFF_API_V2 = "https://world.openfoodfacts.org/api/v2/product";
 function enrichProduct(product) {
   const greenScore = calculateGreenScore(product);
   const { label, colorClass } = getScoreLabel(greenScore);
+  const categoriesText = product.categoriesText || product.categories || product.category || "";
+  const normalizedCategory =
+    product.normalizedCategory || extractSpecificCategory(categoriesText, product.category || "");
+  const categoryTags =
+    Array.isArray(product.categoryTags) && product.categoryTags.length > 0
+      ? [...new Set(product.categoryTags.map((tag) => (tag || "").toLowerCase().trim()).filter(Boolean))]
+      : extractCategoryTags(categoriesText, product.category || "");
 
   return {
     ...product,
     greenScore,
     scoreLabel: label,
     scoreColor: colorClass,
+    normalizedCategory,
+    categoryTags,
   };
 }
 
@@ -53,6 +132,11 @@ function mapOFFProduct(data, barcode) {
     product.categories || "",
     ...(product.categories_tags || [])
   ].join(" ").toLowerCase();
+  const categoriesText =
+    (product.categories || "").trim() ||
+    (product.categories_tags || [])
+      .map((tag) => tag.replace(/^[a-z]{2}:/, "").replace(/-/g, " "))
+      .join(", ");
 
   let category = "Snacks"; // default
   if (categoriesRaw.includes("biscuit") || categoriesRaw.includes("cookie")) category = "Biscuits";
@@ -68,6 +152,7 @@ function mapOFFProduct(data, barcode) {
     name: product.product_name || product.product_name_en || "Unknown Product",
     brand: product.brands || "Unknown Brand",
     category,
+    categoriesText,
     packaging,
     ingredients,
     ingredientsText,
@@ -203,4 +288,70 @@ export async function fetchProduct(barcode) {
 
   // --- 4. All sources exhausted ---
   return null;
+}
+
+/**
+ * Fetch greener alternatives from Firestore based on category metadata.
+ * Returns [] when no relevant alternatives are found.
+ */
+export async function fetchAlternatives(product) {
+  if (!product) return [];
+
+  const enrichedProduct = enrichProduct(product);
+  const normalizedCategory = enrichedProduct.normalizedCategory;
+  const currentScore =
+    typeof product.greenScore === "number" ? product.greenScore : enrichedProduct.greenScore;
+  const currentBarcode = product.barcode || "";
+
+  if (!normalizedCategory) {
+    return [];
+  }
+
+  try {
+    const productsRef = collection(db, "products");
+
+    const exactQuery = query(
+      productsRef,
+      where("normalizedCategory", "==", normalizedCategory),
+      where("greenScore", ">", currentScore),
+      orderBy("greenScore", "desc"),
+      limit(5),
+    );
+    const exactSnap = await getDocs(exactQuery);
+    const exactMatches = exactSnap.docs
+      .map((docSnap) => docSnap.data())
+      .filter((item) => item && item.barcode !== currentBarcode)
+      .slice(0, 5);
+
+    if (exactMatches.length > 0) {
+      return exactMatches;
+    }
+
+    const topCategoryWords = getTopCategoryWords(
+      normalizedCategory,
+      enrichedProduct.categoryTags || [],
+    );
+
+    if (topCategoryWords.length === 0) {
+      return [];
+    }
+
+    const broaderQuery = query(
+      productsRef,
+      where("categoryTags", "array-contains-any", topCategoryWords),
+      where("greenScore", ">", currentScore),
+      orderBy("greenScore", "desc"),
+      limit(5),
+    );
+    const broaderSnap = await getDocs(broaderQuery);
+    const broaderMatches = broaderSnap.docs
+      .map((docSnap) => docSnap.data())
+      .filter((item) => item && item.barcode !== currentBarcode)
+      .slice(0, 5);
+
+    return broaderMatches;
+  } catch (err) {
+    console.warn("Failed to fetch alternatives:", err.message);
+    return [];
+  }
 }
