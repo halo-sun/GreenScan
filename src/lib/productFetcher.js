@@ -79,7 +79,7 @@ function mapOFFProduct(data, barcode) {
   // 4. Logging found/missing fields
   const missing = [];
   const found = [];
-  
+
   Object.entries(mapped).forEach(([key, value]) => {
     if (!value || (Array.isArray(value) && value.length === 0) || value === "Unknown Product" || value === "Unknown Brand") {
       missing.push(key);
@@ -143,7 +143,7 @@ export async function fetchProduct(barcode) {
   // --- 3. Fetch from OpenFoodFacts API ---
   try {
     const response = await fetch(`${OFF_API_V0}/${cleanBarcode}.json`);
-    
+
     if (!response.ok) {
       throw new Error(`OFF API returned ${response.status}`);
     }
@@ -162,7 +162,7 @@ export async function fetchProduct(barcode) {
       try {
         const v2Url = `${OFF_API_V2}/${cleanBarcode}?fields=product_name,ingredients_text,categories,packaging,packaging_tags,categories_tags,brands,image_front_url,ecoscore_grade,nutriscore_grade,labels,manufacturing_places`;
         const v2Response = await fetch(v2Url);
-        
+
         if (v2Response.ok) {
           const v2Data = await v2Response.json();
           if (v2Data.status === 1 && v2Data.product) {
@@ -171,7 +171,7 @@ export async function fetchProduct(barcode) {
               const v2Value = v2Data.product[key];
               const isV2ValueMeaningful = Array.isArray(v2Value) ? v2Value.length > 0 : !!v2Value;
               const isV0ValueEmpty = Array.isArray(productData[key]) ? productData[key].length === 0 : !productData[key];
-              
+
               if (isV2ValueMeaningful && isV0ValueEmpty) {
                 productData[key] = v2Value;
               }

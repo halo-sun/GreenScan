@@ -11,58 +11,63 @@ function scoreToColor(score) {
   return { stroke: "#ef4444", glow: "rgba(239,68,68,0.25)" };
 }
 
-/**
- * Animated circular progress ring showing the Green Score.
- *
- * @param {Object} props
- * @param {number} props.score - Green Score 0-100
- * @param {string} props.label - e.g. "Excellent", "Good"
- * @param {Object} [props.metrics] - Breakdown metrics to display in a grid
- */
 export default function GreenScoreCard({ score = 0, label = "", metrics }) {
   const [animatedScore, setAnimatedScore] = useState(0);
+  const [strokeDashoffset, setStrokeDashoffset] = useState(CIRCUMFERENCE);
   const { stroke, glow } = scoreToColor(score);
-  const offset = CIRCUMFERENCE - (animatedScore / 100) * CIRCUMFERENCE;
+  const targetOffset = CIRCUMFERENCE - (score / 100) * CIRCUMFERENCE;
 
   useEffect(() => {
-    let frame;
-    const duration = 1200;
-    const start = performance.now();
-    const from = 0;
-    const to = score;
+    let initialFrame = requestAnimationFrame(() => {
+      setStrokeDashoffset(CIRCUMFERENCE);
 
-    function animate(now) {
-      const elapsed = now - start;
-      const progress = Math.min(elapsed / duration, 1);
-      // Ease out cubic
+      initialFrame = requestAnimationFrame(() => {
+        setStrokeDashoffset(targetOffset);
+      });
+    });
+
+    return () => cancelAnimationFrame(initialFrame);
+  }, [targetOffset]);
+
+  useEffect(() => {
+    const duration = 1500;
+    const intervalMs = 30;
+    const totalSteps = Math.max(1, Math.floor(duration / intervalMs));
+    let currentStep = 0;
+    let resetFrame = requestAnimationFrame(() => {
+      setAnimatedScore(0);
+    });
+
+    const interval = window.setInterval(() => {
+      currentStep += 1;
+      const progress = Math.min(currentStep / totalSteps, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setAnimatedScore(Math.round(from + (to - from) * eased));
-      if (progress < 1) frame = requestAnimationFrame(animate);
-    }
+      setAnimatedScore(Math.round(score * eased));
 
-    frame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frame);
+      if (progress >= 1) {
+        window.clearInterval(interval);
+      }
+    }, intervalMs);
+
+    return () => {
+      window.clearInterval(interval);
+      cancelAnimationFrame(resetFrame);
+    };
   }, [score]);
 
   return (
-    <div className="bg-gray-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-      {/* Ring */}
+    <div className="rounded-2xl p-6 backdrop-blur-sm border border-[color:var(--border-soft)] bg-[color:var(--surface-card)]/85">
       <div className="flex flex-col items-center gap-4">
         <div className="relative w-40 h-40">
-          <svg
-            className="w-full h-full -rotate-90"
-            viewBox="0 0 120 120"
-          >
-            {/* Background track */}
+          <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
             <circle
               cx="60"
               cy="60"
               r={RADIUS}
               fill="none"
-              stroke="rgba(255,255,255,0.06)"
+              stroke="rgba(255,255,255,0.08)"
               strokeWidth="10"
             />
-            {/* Animated progress */}
             <circle
               cx="60"
               cy="60"
@@ -72,39 +77,34 @@ export default function GreenScoreCard({ score = 0, label = "", metrics }) {
               strokeWidth="10"
               strokeLinecap="round"
               strokeDasharray={CIRCUMFERENCE}
-              strokeDashoffset={offset}
+              strokeDashoffset={strokeDashoffset}
               style={{
-                transition: "stroke-dashoffset 0.1s linear",
+                transition: "stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1)",
                 filter: `drop-shadow(0 0 8px ${glow})`,
               }}
             />
           </svg>
-          {/* Center text */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span
-              className="text-4xl font-extrabold tabular-nums"
-              style={{ color: stroke }}
-            >
+            <span className="text-4xl font-extrabold tabular-nums" style={{ color: stroke }}>
               {animatedScore}
             </span>
-            <span className="text-xs text-gray-400 font-medium tracking-wider uppercase mt-1">
+            <span className="mt-1 text-xs font-medium tracking-wider uppercase text-[color:var(--text-muted)]">
               {label}
             </span>
           </div>
         </div>
 
-        {/* Metrics grid */}
         {metrics && (
           <div className="w-full grid grid-cols-2 gap-3 mt-2">
             {Object.entries(metrics).map(([key, value]) => (
               <div
                 key={key}
-                className="bg-white/5 rounded-xl px-4 py-3 text-center border border-white/5"
+                className="rounded-xl px-4 py-3 text-center border border-[color:var(--border-soft)] bg-[color:var(--surface-muted)]/30"
               >
-                <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">
+                <p className="mb-1 text-xs uppercase tracking-wider text-[color:var(--text-muted)]">
                   {key}
                 </p>
-                <p className="text-sm font-semibold text-gray-200">{value}</p>
+                <p className="text-sm font-semibold text-[color:var(--text-primary)]">{value}</p>
               </div>
             ))}
           </div>
