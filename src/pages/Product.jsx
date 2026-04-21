@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { fetchProduct } from "../lib/productFetcher";
-import { getAlternatives } from "../lib/greenScore";
+import { db } from "../lib/firebase";
+import { calculateGreenScore, getAlternatives, getScoreLabel } from "../lib/greenScore";
 import GreenScoreCard from "../components/GreenScoreCard";
 import ProductCard from "../components/ProductCard";
 
@@ -10,6 +12,9 @@ export default function Product() {
   const [product, setProduct] = useState(null);
   const [alternatives, setAlternatives] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [manualIngredients, setManualIngredients] = useState("");
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalcError, setRecalcError] = useState("");
 
   useEffect(() => {
     async function loadProduct() {
@@ -18,6 +23,7 @@ export default function Product() {
         const data = await fetchProduct(barcode);
         if (data) {
           setProduct(data);
+          setManualIngredients(data.ingredientsText || "");
           const alts = getAlternatives(data);
           setAlternatives(alts);
         } else {
@@ -31,6 +37,66 @@ export default function Product() {
     }
     loadProduct();
   }, [barcode]);
+
+  const shouldShowIngredientsWarning =
+    product &&
+    typeof product.greenScore === "number" &&
+    !(product.ingredientsText || "").trim();
+
+  async function handleRecalculateScore() {
+    const trimmedIngredients = manualIngredients.trim();
+
+    if (!trimmedIngredients || !product) {
+      setRecalcError("Paste the ingredient list before recalculating.");
+      return;
+    }
+
+    setRecalculating(true);
+    setRecalcError("");
+
+    const parsedIngredients = trimmedIngredients
+      .toLowerCase()
+      .split(/[,;()]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    const nextScore = calculateGreenScore({
+      ...product,
+      ingredientsText: trimmedIngredients,
+      ingredients: parsedIngredients,
+      ecoScore: product.ecoscoreGrade || product.ecoScore || "",
+    });
+    const { label, colorClass } = getScoreLabel(nextScore);
+
+    const updatedProduct = {
+      ...product,
+      ingredientsText: trimmedIngredients,
+      ingredients: parsedIngredients,
+      greenScore: nextScore,
+      scoreLabel: label,
+      scoreColor: colorClass,
+    };
+
+    setProduct(updatedProduct);
+    setAlternatives(getAlternatives(updatedProduct));
+
+    try {
+      await setDoc(
+        doc(db, "products", barcode),
+        {
+          ingredientsText: trimmedIngredients,
+          ingredients: parsedIngredients,
+          cachedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    } catch (err) {
+      console.error("Failed to save manual ingredients:", err);
+      setRecalcError("Score updated locally, but saving ingredients failed.");
+    } finally {
+      setRecalculating(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -135,6 +201,43 @@ export default function Product() {
           </p>
         </div>
       </div>
+
+      {shouldShowIngredientsWarning && (
+        <div className="bg-yellow-500/10 border border-yellow-400/30 rounded-3xl p-6 space-y-4">
+          <div className="flex items-start gap-3">
+            <svg className="w-6 h-6 text-yellow-300 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+            </svg>
+            <div>
+              <h3 className="text-lg font-semibold text-yellow-100">
+                Ingredient data missing — score may be inaccurate
+              </h3>
+              <p className="text-sm text-yellow-200/80 mt-1">
+                Paste the product ingredients to recalculate a more reliable Green Score.
+              </p>
+            </div>
+          </div>
+
+          <textarea
+            value={manualIngredients}
+            onChange={(e) => setManualIngredients(e.target.value)}
+            placeholder="Paste ingredients here"
+            className="w-full min-h-32 rounded-2xl border border-yellow-300/20 bg-black/20 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-yellow-400/40"
+          />
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <button
+              type="button"
+              onClick={handleRecalculateScore}
+              disabled={recalculating}
+              className="px-5 py-3 rounded-xl bg-yellow-400 text-slate-950 font-semibold hover:bg-yellow-300 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            >
+              {recalculating ? "Recalculating..." : "Recalculate Score"}
+            </button>
+            {recalcError && <p className="text-sm text-yellow-200">{recalcError}</p>}
+          </div>
+        </div>
+      )}
 
       {/* Alternatives */}
       {alternatives.length > 0 && (

@@ -69,6 +69,110 @@ export const curatedProductsMap = {
     image: "/images/bournvita.webp",
   },
 
+  "8901725181009": {
+    barcode: "8901725181009",
+    name: "Yippee Noodles",
+    brand: "Sunfeast",
+    category: "Instant Noodles",
+    packaging: "Plastic",
+    ingredients: ["wheat flour", "refined wheat", "salt", "tapioca starch", "artificial flavours", "palm oil", "preservatives"],
+    ingredientsText:
+      "Wheat Flour, Refined Wheat, Salt, Tapioca Starch, Artificial Flavours, Palm Oil, Preservatives",
+    ecoscoreGrade: "d",
+    image: "/images/yippee-noodles.webp",
+  },
+
+  "8901725131004": {
+    barcode: "8901725131004",
+    name: "Sunfeast Dark Fantasy",
+    brand: "Sunfeast",
+    category: "Biscuits",
+    packaging: "Plastic",
+    ingredients: ["refined wheat flour", "sugar", "cocoa", "palm oil", "artificial flavours", "emulsifiers"],
+    ingredientsText:
+      "Refined Wheat Flour, Sugar, Cocoa, Palm Oil, Artificial Flavours, Emulsifiers",
+    ecoscoreGrade: "d",
+    image: "/images/sunfeast-dark-fantasy.webp",
+  },
+
+  "4902430": {
+    barcode: "4902430",
+    name: "Lay's Classic Salted",
+    brand: "Lay's",
+    category: "Snacks",
+    packaging: "Plastic",
+    ingredients: ["potatoes", "vegetable oil", "salt"],
+    ingredientsText:
+      "Potatoes, Vegetable Oil, Salt",
+    ecoscoreGrade: "c",
+    image: "/images/lays-classic-salted.webp",
+  },
+
+  "8901058000011": {
+    barcode: "8901058000011",
+    name: "Amul Butter",
+    brand: "Amul",
+    category: "Dairy",
+    packaging: "Paper",
+    ingredients: ["pasteurised cream", "common salt"],
+    ingredientsText:
+      "Pasteurised Cream, Common Salt",
+    ecoscoreGrade: "b",
+    image: "/images/amul-butter.webp",
+  },
+
+  "8901584020015": {
+    barcode: "8901584020015",
+    name: "Tata Tea Premium",
+    brand: "Tata Tea",
+    category: "Tea/Coffee",
+    packaging: "Paper",
+    ingredients: ["black tea", "natural flavours"],
+    ingredientsText:
+      "Black Tea, Natural Flavours",
+    ecoscoreGrade: "b",
+    image: "/images/tata-tea-premium.webp",
+  },
+
+  "8901234567890": {
+    barcode: "8901234567890",
+    name: "Lifebuoy Soap",
+    brand: "Lifebuoy",
+    category: "Personal Care",
+    packaging: "Paper",
+    ingredients: ["sodium palmate", "palm oil", "preservatives", "artificial colours"],
+    ingredientsText:
+      "Sodium Palmate, Palm Oil, Preservatives, Artificial Colours",
+    ecoscoreGrade: "c",
+    image: "/images/lifebuoy-soap.webp",
+  },
+
+  "8901063090002": {
+    barcode: "8901063090002",
+    name: "Real Fruit Juice",
+    brand: "Real",
+    category: "Soft Drinks",
+    packaging: "Tetra Pack",
+    ingredients: ["fruit pulp", "sugar", "citric acid", "artificial flavours", "preservatives"],
+    ingredientsText:
+      "Fruit Pulp, Sugar, Citric Acid, Artificial Flavours, Preservatives",
+    ecoscoreGrade: "c",
+    image: "/images/real-fruit-juice.webp",
+  },
+
+  "8901063031628": {
+    barcode: "8901063031628",
+    name: "Britannia Good Day",
+    brand: "Britannia",
+    category: "Biscuits",
+    packaging: "Plastic",
+    ingredients: ["refined wheat flour", "sugar", "palm oil", "butter", "artificial flavours", "emulsifiers"],
+    ingredientsText:
+      "Refined Wheat Flour, Sugar, Palm Oil, Butter, Artificial Flavours, Emulsifiers",
+    ecoscoreGrade: "d",
+    image: "/images/britannia-good-day.webp",
+  },
+
   // --- Greener Alternatives (Health Drinks) ---
 
   "9900000000001": {
