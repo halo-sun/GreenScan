@@ -9,6 +9,98 @@ import GreenScoreCard from "../components/GreenScoreCard";
 import ProductCard from "../components/ProductCard";
 import SkeletonCard from "../components/SkeletonCard";
 
+function AlternativeCard({ product, currentProduct }) {
+  const [expanded, setExpanded] = useState(false);
+  const { label, colorClass } = getScoreLabel(product.greenScore ?? 0);
+
+  const badgeBg = {
+    "text-emerald-500": "bg-emerald-500/15 border-emerald-500/30 text-emerald-400",
+    "text-green-500": "bg-green-500/15 border-green-500/30 text-green-400",
+    "text-yellow-500": "bg-yellow-500/15 border-yellow-500/30 text-yellow-400",
+    "text-orange-500": "bg-orange-500/15 border-orange-500/30 text-orange-400",
+    "text-red-500": "bg-red-500/15 border-red-500/30 text-red-400",
+  };
+  const badgeClass = badgeBg[colorClass] || badgeBg["text-yellow-500"];
+
+  const currentScore = currentProduct.greenScore ?? 0;
+  const altScore = product.greenScore ?? 0;
+  const scoreDiff = altScore - currentScore;
+
+  const reasons = [];
+  if (product.packaging && currentProduct.packaging) {
+    const packagingRank = { glass: 4, paper: 3, metal: 3, "tetra pack": 2, plastic: 1 };
+    const currentRank = packagingRank[(currentProduct.packaging || "").toLowerCase()] ?? 1;
+    const altRank = packagingRank[(product.packaging || "").toLowerCase()] ?? 1;
+    if (altRank > currentRank) {
+      reasons.push(`Better packaging: ${product.packaging} vs ${currentProduct.packaging}`);
+    }
+  }
+  if (product.ecoscoreGrade && currentProduct.ecoscoreGrade) {
+    const ecoRank = { a: 5, b: 4, c: 3, d: 2, e: 1 };
+    const currentEco = ecoRank[(currentProduct.ecoscoreGrade || "").toLowerCase()] ?? 3;
+    const altEco = ecoRank[(product.ecoscoreGrade || "").toLowerCase()] ?? 3;
+    if (altEco > currentEco) {
+      reasons.push(`Higher EcoScore: ${product.ecoscoreGrade.toUpperCase()} vs ${currentProduct.ecoscoreGrade.toUpperCase()}`);
+    }
+  }
+  if (scoreDiff > 5) {
+    reasons.push(`Higher green score: ${altScore} vs ${currentScore}`);
+  }
+
+  return (
+    <div className="bg-gray-900/60 border border-white/10 rounded-2xl overflow-hidden backdrop-blur-sm hover:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+      <div className="relative h-44 bg-gray-800/50 overflow-hidden">
+        {product.image ? (
+          <img src={product.image} alt={product.name} className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform duration-500" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <svg className="w-12 h-12 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
+          </div>
+        )}
+        <div className={`absolute top-3 right-3 px-2.5 py-1 rounded-lg text-xs font-bold border backdrop-blur-sm ${badgeClass}`}>
+          {product.greenScore ?? "—"}
+        </div>
+      </div>
+      <div className="p-4">
+        <h3 className="text-white font-semibold text-sm truncate group-hover:text-emerald-300 transition-colors">
+          {product.name}
+        </h3>
+        <p className="text-gray-500 text-xs mt-1 truncate">{product.brand}</p>
+        <div className="flex items-center justify-between mt-3">
+          <span className="text-xs text-gray-600 bg-white/5 px-2.5 py-1 rounded-md">{product.category}</span>
+          <span className={`text-xs font-medium ${colorClass}`}>{label}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          className="mt-3 w-full text-xs text-emerald-400 hover:text-emerald-300 flex items-center justify-center gap-1 transition-colors"
+        >
+          {expanded ? "Hide" : "Why"} greener?
+          <svg className={`w-4 h-4 transition-transform ${expanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {expanded && reasons.length > 0 && (
+          <div className="mt-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-400/20">
+            <ul className="space-y-1">
+              {reasons.map((reason, idx) => (
+                <li key={idx} className="text-xs text-emerald-300 flex items-start gap-1">
+                  <svg className="w-3 h-3 mt-0.5 flex-shrink-0 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  {reason}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const PAGE_TRANSITION = {
   initial: { opacity: 0, y: 20 },
   animate: { opacity: 1, y: 0 },
@@ -139,7 +231,9 @@ export default function Product() {
         if (data) {
           setProduct(data);
           setManualIngredients(data.ingredientsText || "");
-          setAlternatives(getAlternatives(data));
+          const alts = getAlternatives(data);
+          console.log("alternatives found:", alts);
+          setAlternatives(alts);
 
           const savedCompare = window.localStorage.getItem("compareProduct");
           if (savedCompare) {
@@ -458,18 +552,24 @@ export default function Product() {
         </div>
       </div>
 
-      {alternatives.length > 0 && (
-        <div className="pt-4">
+      <div className="pt-4">
           <h2 className="mb-6 text-2xl font-bold text-[color:var(--text-primary)]">Greener Alternatives</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {alternatives.map((alt) => (
-              <Link key={alt.barcode} to={`/product/${alt.barcode}`}>
-                <ProductCard product={alt} />
-              </Link>
-            ))}
-          </div>
+          {alternatives.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {alternatives.map((alt) => (
+                <Link key={alt.barcode} to={`/product/${alt.barcode}`}>
+                  <AlternativeCard product={alt} currentProduct={product} />
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-[color:var(--border-soft)] bg-[color:var(--surface-card)]/85 p-6 text-center">
+              <p className="text-[color:var(--text-muted)]">
+                No greener alternatives found in our database yet. We&apos;re constantly adding more products!
+              </p>
+            </div>
+          )}
         </div>
-      )}
     </MotionDiv>
   );
 }
