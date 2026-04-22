@@ -35,7 +35,7 @@ export default function BarcodeScanner({ onResult }) {
       const controls = await readerRef.current.decodeFromVideoDevice(
         undefined, // use default camera
         videoRef.current,
-        (result, err) => {
+        (result) => {
           if (result) {
             const barcode = result.getText();
             stopScanning();
