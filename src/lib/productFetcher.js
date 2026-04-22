@@ -160,7 +160,12 @@ function mapOFFProduct(data, barcode) {
       .join(", ");
 
   let category = "Snacks";
-  if (categoriesRaw.includes("biscuit") || categoriesRaw.includes("cookie")) category = "Biscuits";
+  if (
+    categoriesRaw.includes("sauce") ||
+    categoriesRaw.includes("ketchup") ||
+    categoriesRaw.includes("condiment")
+  ) category = "Sauces";
+  else if (categoriesRaw.includes("biscuit") || categoriesRaw.includes("cookie")) category = "Biscuits";
   else if (categoriesRaw.includes("soft drink") || categoriesRaw.includes("beverage") || categoriesRaw.includes("soda")) category = "Soft Drinks";
   else if (categoriesRaw.includes("dairy") || categoriesRaw.includes("milk") || categoriesRaw.includes("cheese") || categoriesRaw.includes("yogurt")) category = "Dairy";
   else if (categoriesRaw.includes("health") || categoriesRaw.includes("malt") || categoriesRaw.includes("nutrition")) category = "Health Drinks";

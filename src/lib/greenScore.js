@@ -1,5 +1,6 @@
 // --- Category Baselines ---
 const CATEGORY_SCORES = {
+  sauces: 48,
   biscuits: 55,
   "soft drinks": 30,
   dairy: 50,

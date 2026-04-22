@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { collection, query, orderBy, getDocs, where, limit } from "firebase/firestore";
+import { collection, query, orderBy, getDocs } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import ProductCard from "../components/ProductCard";
 
@@ -12,14 +12,81 @@ const PAGE_TRANSITION = {
   transition: { duration: 0.3 },
 };
 
-const BEST_IN_CATEGORY_CONFIG = [
-  { title: "Best Ketchup", field: "categoryTags", operator: "array-contains", value: "ketchup" },
-  { title: "Best Biscuit", field: "category", operator: "==", value: "Biscuits" },
-  { title: "Best Health Drink", field: "category", operator: "==", value: "Health Drinks" },
-  { title: "Best Soft Drink", field: "category", operator: "==", value: "Soft Drinks" },
-  { title: "Best Dairy Product", field: "category", operator: "==", value: "Dairy" },
-  { title: "Best Snack", field: "category", operator: "==", value: "Snacks" },
+const MAJOR_CATEGORIES = [
+  { key: "sauces", title: "Best Sauce" },
+  { key: "biscuits", title: "Best Biscuit" },
+  { key: "health_drinks", title: "Best Health Drink" },
+  { key: "soft_drinks", title: "Best Soft Drink" },
+  { key: "dairy", title: "Best Dairy Product" },
+  { key: "snacks", title: "Best Snack" },
 ];
+
+function toWords(value = "") {
+  return (value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s/-]/g, " ")
+    .replace(/[-_/]+/g, " ")
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function getCategoryTokens(product = {}) {
+  const rawTags = Array.isArray(product.categoryTags) ? product.categoryTags : [];
+  const tags = rawTags
+    .flatMap((tag) => toWords(tag))
+    .filter((token) => token.length >= 3);
+  const categoryWords = toWords(product.category || "");
+  const normalizedWords = toWords(product.normalizedCategory || "");
+  return new Set([...tags, ...categoryWords, ...normalizedWords]);
+}
+
+function getMajorCategoryKey(product = {}) {
+  const tokens = getCategoryTokens(product);
+  const has = (...values) => values.some((value) => tokens.has(value));
+
+  if (has("sauce", "sauces", "ketchup", "ketchups", "condiment", "condiments")) {
+    return "sauces";
+  }
+  if (has("biscuit", "biscuits", "cookie", "cookies")) {
+    return "biscuits";
+  }
+  if (has("health", "malt", "nutrition", "nutritional")) {
+    return "health_drinks";
+  }
+  if (has("soft", "soda", "cola", "beverage", "beverages", "drink", "drinks")) {
+    return "soft_drinks";
+  }
+  if (has("dairy", "milk", "cheese", "yogurt", "yoghurt")) {
+    return "dairy";
+  }
+  if (has("snack", "snacks", "chips", "namkeen")) {
+    return "snacks";
+  }
+  return null;
+}
+
+function getTopRatedByCategory(products = []) {
+  const leaders = new Map();
+
+  products.forEach((product) => {
+    const categoryKey = getMajorCategoryKey(product);
+    if (!categoryKey) return;
+
+    const score = Number(product.greenScore);
+    if (!Number.isFinite(score)) return;
+
+    const current = leaders.get(categoryKey);
+    if (!current || score > Number(current.greenScore)) {
+      leaders.set(categoryKey, product);
+    }
+  });
+
+  return MAJOR_CATEGORIES.map((config) => ({
+    ...config,
+    product: leaders.get(config.key) || null,
+  }));
+}
 
 export default function Database() {
   const MotionDiv = motion.div;
@@ -38,30 +105,7 @@ export default function Database() {
           ...doc.data(),
         }));
         setProducts(data);
-
-        const categoryQueries = BEST_IN_CATEGORY_CONFIG.map(async (config) => {
-          try {
-            const topQuery = query(
-              collection(db, "products"),
-              where(config.field, config.operator, config.value),
-              orderBy("greenScore", "desc"),
-              limit(1),
-            );
-            const topSnapshot = await getDocs(topQuery);
-            if (topSnapshot.empty) return { ...config, product: null };
-            const bestDoc = topSnapshot.docs[0];
-            return {
-              ...config,
-              product: { id: bestDoc.id, ...bestDoc.data() },
-            };
-          } catch (error) {
-            console.warn(`Best category query failed for ${config.title}:`, error);
-            return { ...config, product: null };
-          }
-        });
-
-        const bestResults = await Promise.all(categoryQueries);
-        setBestByCategory(bestResults);
+        setBestByCategory(getTopRatedByCategory(data));
       } catch (err) {
         console.error("Error fetching database:", err);
       } finally {

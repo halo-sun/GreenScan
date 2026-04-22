@@ -4,6 +4,7 @@ import {
   collection,
   collectionGroup,
   getDocs,
+  limit,
   query,
   where,
 } from "firebase/firestore";
@@ -47,16 +48,49 @@ export default function Admin() {
   const [pendingSuggestions, setPendingSuggestions] = useState([]);
 
   useEffect(() => {
+    async function getScanCountSince(startDate) {
+      try {
+        const scansQuery = query(
+          collectionGroup(db, "scans"),
+          where("scannedAt", ">=", startDate),
+        );
+        const snapshot = await getDocs(scansQuery);
+        return snapshot.size;
+      } catch (err) {
+        console.warn("Collection group scan query failed, using fallback:", err);
+      }
+
+      try {
+        const fallbackQuery = query(
+          collection(db, "scans"),
+          where("lastScannedAt", ">=", startDate),
+          limit(1000),
+        );
+        const fallbackSnapshot = await getDocs(fallbackQuery);
+        return fallbackSnapshot.size;
+      } catch (err) {
+        console.warn("Fallback scan query failed:", err);
+        return 0;
+      }
+    }
+
     async function fetchAdminData() {
       setLoading(true);
       setError("");
 
       try {
-        const productsSnap = await getDocs(collection(db, "products"));
-        const products = productsSnap.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...docSnap.data(),
-        }));
+        const [productsResult, scansResult] = await Promise.allSettled([
+          getDocs(collection(db, "products")),
+          getDocs(collection(db, "scans")),
+        ]);
+
+        const products =
+          productsResult.status === "fulfilled"
+            ? productsResult.value.docs.map((docSnap) => ({
+              id: docSnap.id,
+              ...docSnap.data(),
+            }))
+            : [];
 
         const totalProducts = products.length;
         const productsWithScore = products.filter((item) => typeof item.greenScore === "number");
@@ -69,8 +103,10 @@ export default function Admin() {
           .filter((item) => !(item.ingredientsText || "").trim())
           .slice(0, 50);
 
-        const scansSnap = await getDocs(collection(db, "scans"));
-        const scanDocs = scansSnap.docs.map((docSnap) => docSnap.data());
+        const scanDocs =
+          scansResult.status === "fulfilled"
+            ? scansResult.value.docs.map((docSnap) => docSnap.data())
+            : [];
         const totalScansAllTime = scanDocs.reduce((sum, item) => sum + (Number(item.count) || 0), 0);
 
         const categoryCounts = {};
@@ -85,40 +121,36 @@ export default function Admin() {
         const todayStart = getStartOfToday();
         const weekStart = getStartOfWeek();
 
-        const todayScansQuery = query(
-          collectionGroup(db, "scans"),
-          where("scannedAt", ">=", todayStart),
-        );
-        const weekScansQuery = query(
-          collectionGroup(db, "scans"),
-          where("scannedAt", ">=", weekStart),
-        );
-        const pendingSuggestionsQuery = query(
-          collection(db, "suggestions"),
-          where("status", "==", "pending"),
-        );
-
-        const [todayScansSnap, weekScansSnap, pendingSuggestionsSnap] = await Promise.all([
-          getDocs(todayScansQuery),
-          getDocs(weekScansQuery),
-          getDocs(pendingSuggestionsQuery),
+        const [todayCount, weekCount, pendingSuggestionsResult] = await Promise.all([
+          getScanCountSince(todayStart),
+          getScanCountSince(weekStart),
+          getDocs(query(collection(db, "suggestions"), where("status", "==", "pending"))).catch((err) => {
+            console.warn("Pending suggestions query failed:", err);
+            return null;
+          }),
         ]);
 
-        const suggestions = pendingSuggestionsSnap.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...docSnap.data(),
-        }));
+        const suggestions = pendingSuggestionsResult
+          ? pendingSuggestionsResult.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...docSnap.data(),
+          }))
+          : [];
 
         setStats({
           totalProducts,
-          totalScansToday: todayScansSnap.size,
-          totalScansWeek: weekScansSnap.size,
+          totalScansToday: todayCount,
+          totalScansWeek: weekCount,
           totalScansAllTime,
           mostScannedCategory,
           averageGreenScore,
         });
         setMissingIngredients(missing);
         setPendingSuggestions(suggestions);
+
+        if (productsResult.status === "rejected" && scansResult.status === "rejected") {
+          setError("Failed to load admin data.");
+        }
       } catch (err) {
         console.error("Failed to load admin stats:", err);
         setError("Failed to load admin data.");
